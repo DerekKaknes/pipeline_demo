@@ -87,6 +87,7 @@ def main():
         y_test)))
     print("Ensemble out-of-sample score of {}".format(score))
 
+    # Persist ensemble model/pipeline
     joblib.dump(ens_grid, "models/ens.pkl")
 
 if __name__ == "__main__":
