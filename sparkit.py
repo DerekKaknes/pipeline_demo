@@ -10,36 +10,67 @@ from sklearn.model_selection import train_test_split
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.ml import Pipeline
-from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.feature import Normalizer, VectorAssembler
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.classification import LogisticRegression, MultilayerPerceptronClassifier
+from pyspark.ml.feature import Normalizer, VectorAssembler, StringIndexer,\
+IndexToString, Binarizer
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
 def run(spark):
     random_seed = 43
 
-    iris = load_iris()
     digits = load_digits()
+    data = pd.DataFrame(data = digits.data)
 
-    df = pd.DataFrame(data = np.c_[iris.data, iris.target], columns =
-            iris.feature_names + ["label"])
+    label = "label"
+    labels = map(str, digits.target_names)
+    features = map(lambda x: "pixel{}".format(x), data.columns)
+    data.columns = features
+    layers = [len(features), 25, 10, len(labels)]
 
-    df2 = pd.DataFrame(data = digits.data)
-    df2["label"] = pd.Series(digits.target)
+    data["label"] = pd.Series(digits.target)
 
-    data = spark.createDataFrame(df2)
-    train, test = data.randomSplit([0.8, 0.2], seed=random_seed)
+    df = spark.createDataFrame(data)
+    train, test = df.randomSplit([0.8, 0.2], seed=random_seed)
 
-    assembler = VectorAssembler(
-            inputCols = map(str, range(64)),
-            outputCol = "features")
+    assembler = VectorAssembler()\
+            .setInputCols(features)
 
+    binarizer = Binarizer()\
+            .setInputCol(assembler.getOutputCol())\
+            .setThreshold(3.)
 
-    lr = LogisticRegression()
-    pipeline = Pipeline(stages = [assembler, lr])
+    stringIndexer = StringIndexer()\
+            .setInputCol(label)
+    stringIndexerModel = stringIndexer.fit(train)
+
+    nnet = MultilayerPerceptronClassifier()\
+            .setLabelCol(stringIndexer.getOutputCol())\
+            .setFeaturesCol(binarizer.getOutputCol())\
+            .setLayers(layers)\
+            .setSeed(random_seed)\
+            .setBlockSize(128)\
+            .setMaxIter(100)\
+            .setTol(1e-7)
+
+    indexToString = IndexToString()\
+            .setInputCol(nnet.getPredictionCol())\
+            .setLabels(stringIndexerModel.labels)
+
+    pipeline = Pipeline()\
+            .setStages([assembler, binarizer, stringIndexer, nnet, indexToString])
+
+    ev = MulticlassClassificationEvaluator()\
+            .setLabelCol(stringIndexer.getOutputCol())\
+            .setPredictionCol(nnet.getPredictionCol())\
+            .setMetricName("accuracy")
 
     model = pipeline.fit(train)
-    pred = model.transform(test)
-    pred.select("features", "label", "prediction").show()
+    result = model.transform(test)
+    precision = ev.evaluate(result)
+    print("Precision = {}".format(precision))
+
+
 
 
 if __name__ == "__main__":
