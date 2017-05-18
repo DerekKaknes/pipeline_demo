@@ -8,11 +8,12 @@ machine learning objects in sklearn.
     ensemble grid to `./models/ens.pkl`
 3.  Load ensemble grid using `python load.py` to load and re-score model (should
     produce same final output)
+4.  Execute `spark_pipeline.py` using `spark-submit spark_pipeline.py`
 
 ## To Do:
--  Determine best integration with `pyspark`.  `pyspark` has a `spark_sklearn`
-   module with a `GridSearchCV` that seems to work occasionally, but can run
-into trouble if it encounters ml algorithms that it doesn't like.
 -  Determine how to best store "sub-workflow" Pipelines that can be integrated
    into more complex workflows (i.e. other Pipelines).  Maybe store them in
 separate module so they can be imported into new scripts?
+-  Explore ways to pass column names to `VectorAssembler` in `pyspark.Pipeline`
+-  Explore ability to execute `pyspark.Pipeline` in parallel, test performance
+   verse manual thread control
